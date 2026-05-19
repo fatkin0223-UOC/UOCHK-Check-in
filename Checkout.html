@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>學校訪客 Check-in 系統</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 400px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            box-sizing: border-box;
+        }
+        h2 {
+            text-align: center;
+            color: #333;
+            margin-top: 0;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            font-size: 12px;
+            color: #666;
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        #status {
+            text-align: center;
+            padding: 12px;
+            background: #eee;
+            border-radius: 8px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        .status-ready { background: #eee; color: #333; }
+        .status-loading { background: #fff3cd; color: #856404; }
+        .status-success { background: #d4edda; color: #155724; }
+        .status-error { background: #f8d7da; color: #721c24; }
+
+        #reader {
+            width: 100%;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        button {
+            width: 100%;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            background-color: #007bff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button.scanning {
+            background-color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>學校訪客 Check-in</h2>
+    
+    <div class="input-group">
+        <label>Make.com Webhook 網址設定:</label>
+        <input type="text" id="webhookURL" value="https://hook.us2.make.com/eq9o9s07uf9hclgt1h9r3ugmw8hq9hit">
+    </div>
+
+    <div id="status" class="status-ready">準備就緒</div>
+
+    <div id="reader" style="display: none;"></div>
+
+    <button id="scanBtn" onclick="toggleScanner()">開啟相機掃描</button>
+</div>
+
+<script>
+    let html5QrcodeScanner = null;
+    const statusDiv = document.getElementById('status');
+    const scanBtn = document.getElementById('scanBtn');
+    const readerDiv = document.getElementById('reader');
+
+    function updateStatus(text, className) {
+        statusDiv.innerText = text;
+        statusDiv.className = className;
+    }
+
+    function toggleScanner() {
+        if (html5QrcodeScanner && html5QrcodeScanner.isScanning) {
+            // 停止掃描
+            stopScanner();
+        } else {
+            // 開始掃描
+            startScanner();
+        }
+    }
+
+    function startScanner() {
+        readerDiv.style.display = 'block';
+        updateStatus('正在啟動相機...', 'status-loading');
+        scanBtn.innerText = '停止掃描';
+        scanBtn.classList.add('scanning');
+
+        html5QrcodeScanner = new Html5Qrcode("reader");
+        
+        // 優先使用後置相機 (facingMode: environment)
+        html5QrcodeScanner.start(
+            { facingMode: "environment" }, 
+            {
+                fps: 10,    // 每秒掃描幀數
+                qrbox: { width: 250, height: 250 }  // 掃描框大小
+            },
+            (decodedText, decodedResult) => {
+                // 成功掃描到 QR Code
+                stopScanner();
+                // 觸發手機短震動（部分 Android 支援，iOS 網頁限制較嚴格）
+                if (navigator.vibrate) navigator.vibrate(200); 
+                sendCheckInRequest(decodedText);
+            },
+            (errorMessage) => {
+                // 這裡會持續輸出相機尋找條碼的日誌，不用理會
+            }
+        ).then(() => {
+            updateStatus('請對準訪客的 QR Code', 'status-ready');
+        }).catch(err => {
+            updateStatus('相機啟動失敗：' + err, 'status-error');
+            stopScanner();
+        });
+    }
+
+    function stopScanner() {
+        if (html5QrcodeScanner) {
+            html5QrcodeScanner.stop().then(() => {
+                html5QrcodeScanner = null;
+                readerDiv.style.display = 'none';
+                scanBtn.innerText = '開啟相機掃描';
+                scanBtn.classList.remove('scanning');
+                if(statusDiv.className === 'status-loading') {
+                    updateStatus('準備就緒', 'status-ready');
+                }
+            }).catch(err => {
+                console.error("無法停止相機:", err);
+            });
+        }
+    }
+
+    // 發送請求給 Make.com
+    function sendCheckInRequest(recordId) {
+        updateStatus('正在傳送簽到資料...', 'status-loading');
+        
+        const baseURL = document.getElementById('webhookURL').value;
+        const fullURL = `${baseURL}?recordId=${encodeURIComponent(recordId)}`;
+
+        // 使用 fetch 發送靜默背景請求
+        fetch(fullURL)
+        .then(response => {
+            if (response.ok) {
+                updateStatus('✅ 簽到成功！貼紙列印中', 'status-success');
+                // 播放內建提示音（選填）
+                playBeep();
+            } else {
+                updateStatus('❌ 簽到失敗 (伺服器回應錯誤)', 'status-error');
+            }
+        })
+        .catch(error => {
+            updateStatus('❌ 連線失敗: ' + error.message, 'status-error');
+        });
+    }
+
+    // 模擬原生 App 的逼逼聲
+    function playBeep() {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 1000; // 1000Hz 嗶聲
+        gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.15); // 響 0.15 秒
+    }
+</script>
+
+</body>
+</html>
