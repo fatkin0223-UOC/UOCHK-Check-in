@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>學校訪客 Check-in 系統</title>
+    <title>學校訪客 Check-Out 系統</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f4f6f9;
+            background-color: #FFFF00;
             margin: 0;
             padding: 20px;
             display: flex;
@@ -91,7 +91,7 @@
     
     <div class="input-group">
         <label>Make.com Webhook 網址設定:</label>
-        <input type="text" id="webhookURL" value="https://hook.us2.make.com/eq9o9s07uf9hclgt1h9r3ugmw8hq9hit">
+        <input type="text" id="webhookURL" value="https://hook.us2.make.com/twua6i2r6nwja2qnju45924m31enmxzo">
     </div>
 
     <div id="status" class="status-ready">準備就緒</div>
@@ -182,11 +182,11 @@
         fetch(fullURL)
         .then(response => {
             if (response.ok) {
-                updateStatus('✅ 簽到成功！貼紙列印中', 'status-success');
+                updateStatus('✅ 簽走成功！', 'status-success');
                 // 播放內建提示音（選填）
                 playBeep();
             } else {
-                updateStatus('❌ 簽到失敗 (伺服器回應錯誤)', 'status-error');
+                updateStatus('❌ 簽走失敗 ', 'status-error');
             }
         })
         .catch(error => {
